@@ -1,6 +1,22 @@
 # NTAL Telehealth MVP
 
-Inclusive, safe telehealth via USSD/SMS/WhatsApp and an offline-first CHW app, with FHIR-based clinical data and consent/audit by design.
+[![CI](https://github.com/tiwa-codes/NTAL/actions/workflows/ci.yml/badge.svg)](https://github.com/tiwa-codes/NTAL/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Node 18+](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+> Inclusive, safe telehealth via USSD/SMS/WhatsApp and an offline-first CHW app, with FHIR-based clinical data and consent/audit by design.
+
+## 🌟 Features
+
+- 🏥 **Store-and-Forward Triage** - Patients submit symptoms asynchronously
+- 👨‍⚕️ **Provider Dashboard** - Healthcare professionals review and manage cases
+- 🔐 **Secure Authentication** - JWT-based provider authentication
+- 📱 **Multi-Channel Access** - Web, USSD, SMS, WhatsApp, IVR (stubs ready)
+- 💻 **PWA Support** - Offline-capable Progressive Web App
+- 🐳 **Docker Ready** - Containerized deployment
+- ✅ **Tested** - Comprehensive test coverage with pytest
+- 📖 **OpenAPI Docs** - Auto-generated API documentation
 
 ## 🏗️ Architecture
 
@@ -58,8 +74,13 @@ cp .env.example .env
 # Seed initial data
 python seed_data.py
 
+# Note: If you encounter bcrypt compatibility issues, you may need to:
+# pip install bcrypt==4.0.1
+
 # Start development server
 uvicorn app.main:app --reload
+# Or use the convenience script:
+# ./start-dev.sh
 ```
 
 The backend will be available at http://localhost:8000
@@ -108,9 +129,9 @@ pytest -v
 
 After seeding the database, use these credentials to login:
 
-- **Doctor**: `dr.smith` / `password123`
-- **Nurse**: `nurse.jane` / `password123`
-- **CHW**: `chw.mary` / `password123`
+- **Doctor**: `dr.smith` / `pass123`
+- **Nurse**: `nurse.jane` / `pass123`
+- **CHW**: `chw.mary` / `pass123`
 
 ## 📡 API Endpoints
 
@@ -293,6 +314,54 @@ This project is part of the NTAL initiative for inclusive healthcare access.
 For issues and questions:
 - Open an issue on GitHub
 - Contact the development team
+
+## 🔧 Troubleshooting
+
+### Backend
+
+**bcrypt compatibility issues**
+```bash
+# If you encounter bcrypt errors during installation or seeding:
+pip uninstall bcrypt
+pip install bcrypt==4.0.1
+```
+
+**Database locked errors**
+```bash
+# If SQLite database is locked, close any existing connections:
+rm ntal.db
+python seed_data.py
+```
+
+**Import errors**
+```bash
+# Ensure all dependencies are installed:
+pip install -r requirements.txt
+```
+
+### Frontend
+
+**Build errors with Tailwind**
+```bash
+# Clear node_modules and reinstall:
+rm -rf node_modules package-lock.json
+npm install
+```
+
+**CORS errors**
+```bash
+# Ensure backend is running and CORS is properly configured
+# Check that VITE_API_URL in .env points to the correct backend URL
+```
+
+### Docker
+
+**Port already in use**
+```bash
+# Change ports in docker-compose.yml or stop conflicting services
+docker-compose down
+docker-compose up
+```
 
 ## 🗺️ Roadmap
 
