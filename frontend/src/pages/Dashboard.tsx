@@ -1,30 +1,49 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { encounterService } from '../services/api';
-import type { Encounter } from '../types';
+import { encounterService, callbackService } from '../services/api';
+import type { Encounter, Callback } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import CallbackQueue from '../components/CallbackQueue';
 
 const Dashboard: React.FC = () => {
   const [encounters, setEncounters] = useState<Encounter[]>([]);
+  const [callbacks, setCallbacks] = useState<Callback[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [view, setView] = useState<'encounters' | 'callbacks'>('encounters');
   const { provider, logout } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    loadEncounters();
+    loadData();
   }, []);
 
-  const loadEncounters = async () => {
+  const loadData = async () => {
     try {
-      const data = await encounterService.getAll();
-      setEncounters(data);
+      const [encountersData, callbacksData] = await Promise.all([
+        encounterService.getAll(),
+        callbackService.getAll()
+      ]);
+      setEncounters(encountersData);
+      setCallbacks(callbacksData);
     } catch (error) {
-      console.error('Failed to load encounters:', error);
+      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleAssignCallback = async (callbackId: number) => {
+    if (!provider) return;
+    await callbackService.assign(callbackId, { provider_id: provider.id });
+  };
+
+  const handleCompleteCallback = async (callbackId: number, outcome: string, notes?: string) => {
+    await callbackService.complete(callbackId, { outcome, notes });
+  };
+
+  // Create encounter map for callback queue
+  const encounterMap = new Map(encounters.map(e => [e.id, e]));
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
@@ -78,39 +97,80 @@ const Dashboard: React.FC = () => {
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Provider Dashboard</h2>
           
+          {/* View Toggle */}
           <div className="flex space-x-2 mb-4">
             <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
+              onClick={() => setView('encounters')}
+              className={`px-6 py-2 rounded-lg font-medium ${
+                view === 'encounters'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
             >
-              All
+              All Encounters
             </button>
             <button
-              onClick={() => setFilter('pending')}
-              className={`px-4 py-2 rounded ${filter === 'pending' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
+              onClick={() => setView('callbacks')}
+              className={`px-6 py-2 rounded-lg font-medium ${
+                view === 'callbacks'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
             >
-              Pending
-            </button>
-            <button
-              onClick={() => setFilter('in_progress')}
-              className={`px-4 py-2 rounded ${filter === 'in_progress' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
-            >
-              In Progress
-            </button>
-            <button
-              onClick={() => setFilter('completed')}
-              className={`px-4 py-2 rounded ${filter === 'completed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
-            >
-              Completed
+              USSD Callbacks
+              {callbacks.filter(cb => cb.status === 'queued').length > 0 && (
+                <span className="ml-2 px-2 py-0.5 bg-red-500 text-white rounded-full text-xs">
+                  {callbacks.filter(cb => cb.status === 'queued').length}
+                </span>
+              )}
             </button>
           </div>
+
+          {/* Encounter Filters (only show when viewing encounters) */}
+          {view === 'encounters' && (
+            <div className="flex space-x-2 mb-4">
+              <button
+                onClick={() => setFilter('all')}
+                className={`px-4 py-2 rounded ${filter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
+              >
+                All
+              </button>
+              <button
+                onClick={() => setFilter('pending')}
+                className={`px-4 py-2 rounded ${filter === 'pending' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
+              >
+                Pending
+              </button>
+              <button
+                onClick={() => setFilter('in_progress')}
+                className={`px-4 py-2 rounded ${filter === 'in_progress' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
+              >
+                In Progress
+              </button>
+              <button
+                onClick={() => setFilter('completed')}
+                className={`px-4 py-2 rounded ${filter === 'completed' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 border'}`}
+              >
+                Completed
+              </button>
+            </div>
+          )}
         </div>
 
         {loading ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-gray-600">Loading encounters...</p>
+            <p className="mt-4 text-gray-600">Loading...</p>
           </div>
+        ) : view === 'callbacks' ? (
+          <CallbackQueue
+            callbacks={callbacks}
+            encounters={encounterMap}
+            providerId={provider?.id || 0}
+            onAssign={handleAssignCallback}
+            onComplete={handleCompleteCallback}
+            onRefresh={loadData}
+          />
         ) : filteredEncounters.length === 0 ? (
           <div className="bg-white rounded-lg shadow p-8 text-center">
             <p className="text-gray-600">No encounters found.</p>
@@ -127,10 +187,16 @@ const Dashboard: React.FC = () => {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">
-                        {encounter.patient_name}
+                        {encounter.patient_name || `Case #${encounter.id}`}
+                        {encounter.channel === 'USSD' && (
+                          <span className="ml-2 text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
+                            USSD
+                          </span>
+                        )}
                       </h3>
                       <p className="text-sm text-gray-600">
-                        Case #{encounter.id} • {encounter.patient_phone}
+                        Case #{encounter.id}
+                        {encounter.patient_phone && ` • ${encounter.patient_phone}`}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -144,8 +210,17 @@ const Dashboard: React.FC = () => {
                   </div>
                   
                   <div className="mb-3">
-                    <p className="text-sm font-medium text-gray-700">Chief Complaint:</p>
-                    <p className="text-gray-900">{encounter.chief_complaint}</p>
+                    {encounter.chief_complaint ? (
+                      <>
+                        <p className="text-sm font-medium text-gray-700">Chief Complaint:</p>
+                        <p className="text-gray-900">{encounter.chief_complaint}</p>
+                      </>
+                    ) : encounter.risk_code ? (
+                      <>
+                        <p className="text-sm font-medium text-gray-700">Risk Assessment:</p>
+                        <p className="text-gray-900">{encounter.risk_code.replace('_', ' ')}</p>
+                      </>
+                    ) : null}
                   </div>
 
                   {encounter.symptoms && (
@@ -156,7 +231,7 @@ const Dashboard: React.FC = () => {
                   )}
 
                   <div className="flex items-center justify-between text-sm text-gray-500 pt-3 border-t">
-                    <span>Source: {encounter.source}</span>
+                    <span>Source: {encounter.channel || encounter.source}</span>
                     <span>
                       Submitted: {new Date(encounter.created_at).toLocaleDateString()} {new Date(encounter.created_at).toLocaleTimeString()}
                     </span>
