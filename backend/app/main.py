@@ -1,11 +1,22 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from .api.v1.endpoints import router as api_router
 from .core.database import engine, Base
-from .models.models import Provider, Encounter
+from .core.redis_client import get_redis, close_redis
+from .models.models import Provider, Encounter, Callback
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan (startup/shutdown)."""
+    # Startup: Create database tables and initialize Redis
+    Base.metadata.create_all(bind=engine)
+    await get_redis()
+    yield
+    # Shutdown: Close Redis connection
+    await close_redis()
+
 
 app = FastAPI(
     title="NTAL Telehealth API",
@@ -14,6 +25,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 # CORS middleware
