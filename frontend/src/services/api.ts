@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Encounter, EncounterCreate, LoginRequest, TokenResponse, Provider } from '../types';
+import type { Encounter, EncounterCreate, LoginRequest, TokenResponse, Provider, Callback, CallbackAssign, CallbackComplete } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
@@ -55,6 +55,26 @@ export const encounterService = {
 
   update: async (id: number, data: Partial<Encounter>): Promise<Encounter> => {
     const response = await api.put<Encounter>(`/encounters/${id}`, data);
+    return response.data;
+  },
+};
+
+export const callbackService = {
+  getAll: async (status?: string, priority?: string): Promise<Callback[]> => {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    if (priority) params.append('priority', priority);
+    const response = await api.get<Callback[]>(`/callbacks?${params.toString()}`);
+    return response.data;
+  },
+
+  assign: async (id: number, data: CallbackAssign): Promise<Callback> => {
+    const response = await api.post<Callback>(`/callbacks/${id}/assign`, data);
+    return response.data;
+  },
+
+  complete: async (id: number, data: CallbackComplete): Promise<Callback> => {
+    const response = await api.post<Callback>(`/callbacks/${id}/complete`, data);
     return response.data;
   },
 };

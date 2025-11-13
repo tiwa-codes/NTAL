@@ -1,6 +1,14 @@
 version: '3.8'
 
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
   backend:
     build: ./backend
     ports:
@@ -8,9 +16,15 @@ services:
     environment:
       - DATABASE_URL=sqlite:///./ntal.db
       - SECRET_KEY=dev-secret-key-change-in-production
+      - REDIS_URL=redis://redis:6379
+      - HASH_PEPPER=dev-hash-pepper-change-in-production
+      - CONSENT_VERSION=v0.1-EN-USSD
+      - RATE_LIMIT_MAX=10
     volumes:
       - ./backend:/app
       - backend-db:/app
+    depends_on:
+      - redis
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
@@ -24,3 +38,4 @@ services:
 
 volumes:
   backend-db:
+  redis-data:

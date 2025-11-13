@@ -25,6 +25,7 @@
 - **Pydantic** - Data validation using Python type annotations
 - **SQLAlchemy** - SQL toolkit and ORM
 - **SQLite** - Development database (PostgreSQL-ready for production)
+- **Redis** - Session state and rate limiting for USSD
 - **JWT Authentication** - Secure provider authentication
 - **OpenAPI** - Auto-generated API documentation
 - **pytest** - Testing framework
@@ -218,21 +219,176 @@ These are currently stubs ready for implementation with actual service providers
 - CORS protection
 - Environment variable configuration
 - SQL injection prevention (SQLAlchemy ORM)
+- **USSD Privacy**: MSISDN hashed with SHA-256 + pepper; no PII in logs
+- **Rate Limiting**: 10 USSD triages per phone number per 24 hours
+- **Consent Tracking**: Version-tracked consent with each USSD session
+
+## 📱 USSD Integration
+
+### Overview
+
+NTAL supports USSD as the primary entry point for patients with feature phones. The USSD flow guides users through a consent process, symptom collection, automated triage, and optional callback request.
+
+### USSD Flow
+
+1. **Consent** → User agrees to data processing (NDPA-compliant)
+2. **Language Selection** → English or Yoruba
+3. **Demographics** → Age group (anonymized) and gender
+4. **Symptom Assessment** → Fever, headache, danger signs, cough
+5. **Triage Result** → Risk level with advice
+6. **Callback Option** → Request provider callback if needed
+
+### Risk Levels
+
+- **EMERGENCY**: Danger signs present (difficulty breathing, chest pain, confusion, severe bleeding) → Urgent callback
+- **MALARIA_SUSPECT**: Fever + severe headache → High priority callback
+- **FEVER_GENERAL**: Fever only → Medium priority callback
+- **LOW_RISK**: No significant symptoms → Low priority callback
+
+### API Endpoint
+
+**POST /api/v1/ussd**
+
+Request format (from USSD aggregator):
+```json
+{
+  "sessionId": "ATUid_abc123",
+  "phoneNumber": "+254712345678",
+  "serviceCode": "*123#",
+  "text": "1*2*3"
+}
+```
+
+Response format:
+```json
+{
+  "response": "CON Select age group:\n1. Under 5\n2. 5-17 years\n3. 18-49 years\n4. 50+ years"
+}
+```
+
+- `CON` = Continue session (show menu)
+- `END` = End session (final message)
+
+### Testing USSD Locally
+
+#### 1. Start the backend with Redis:
+
+```bash
+# Using Docker Compose (recommended)
+docker-compose up
+
+# Or locally with Redis installed
+# Terminal 1: Start Redis
+redis-server
+
+# Terminal 2: Start backend
+cd backend
+source venv/bin/activate
+uvicorn app.main:app --reload
+```
+
+#### 2. Use the USSD Simulator:
+
+```bash
+cd backend
+
+# Interactive mode
+python ussd_simulator.py interactive +254712345678
+
+# Run automated scenarios
+python ussd_simulator.py scenario low_risk
+python ussd_simulator.py scenario emergency
+python ussd_simulator.py scenario malaria
+python ussd_simulator.py scenario callback
+```
+
+### Callback Queue
+
+Providers can manage callback requests through authenticated endpoints:
+
+**GET /api/v1/callbacks** - List callbacks (filter by status/priority)
+**POST /api/v1/callbacks/:id/assign** - Assign to provider
+**POST /api/v1/callbacks/:id/complete** - Mark complete with outcome
+
+### Analytics
+
+**GET /api/v1/metrics/ussd** (Admin only)
+
+Returns:
+- Total USSD sessions and completion rate
+- Risk distribution
+- Daily encounter counts (last 7 days)
+- Callback SLA metrics (avg time to assign/complete)
+
+### Privacy & Data Minimization
+
+USSD encounters store:
+- ✅ Hashed MSISDN (SHA-256 + pepper) - NOT plain phone number
+- ✅ Age group (e.g., "18-49") - NOT exact age
+- ✅ Gender
+- ✅ Symptom responses (structured JSON)
+- ✅ Risk code and consent version
+
+USSD encounters do NOT store:
+- ❌ Patient name
+- ❌ Exact phone number
+- ❌ Location data
+- ❌ Medical history details
+
+### Rate Limiting
+
+To prevent abuse, USSD enforces a rate limit of **10 triages per phone number per 24 hours**. After exceeding the limit, users receive:
+
+```
+END Limit reached. Try again tomorrow.
+```
+
+### Language Support
+
+Current languages:
+- **English (en)** - Default
+- **Yoruba (yo)** - Nigerian language
+
+Messages are kept concise (≤160 characters) for USSD compatibility. New languages can be added in `app/core/language_strings.py`.
+
+### Aggregator Integration
+
+To integrate with a real USSD aggregator:
+
+1. Configure your USSD code (e.g., `*123#`) with the aggregator
+2. Set the callback URL to: `https://your-domain.com/api/v1/ussd`
+3. Ensure the aggregator sends POST requests with the standard fields
+4. Configure environment variables in `.env`:
+
+```env
+REDIS_URL=redis://localhost:6379
+HASH_PEPPER=your-secret-pepper-value-change-in-production
+CONSENT_VERSION=v0.1-EN-USSD
+RATE_LIMIT_MAX=10
+```
 
 ## 🚢 Deployment
 
 ### Environment Variables
 
 #### Backend (.env)
-```
+```env
 DATABASE_URL=sqlite:///./ntal.db
 SECRET_KEY=your-secret-key-change-in-production
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# Redis for USSD session state and rate limiting
+REDIS_URL=redis://localhost:6379
+
+# USSD configuration
+HASH_PEPPER=your-hash-pepper-change-in-production
+CONSENT_VERSION=v0.1-EN-USSD
+RATE_LIMIT_MAX=10
 ```
 
 For PostgreSQL:
-```
+```env
 DATABASE_URL=postgresql://user:password@localhost/ntal
 ```
 
@@ -363,15 +519,29 @@ docker-compose down
 docker-compose up
 ```
 
+**Redis connection issues**
+```bash
+# Ensure Redis is running
+redis-cli ping  # Should return PONG
+
+# Or start with Docker
+docker run -d -p 6379:6379 redis:7-alpine
+```
+
 ## 🗺️ Roadmap
 
-- [ ] FHIR integration
+- [x] USSD flow with triage engine
+- [x] Callback queue system
+- [x] Multi-language support (EN, Yoruba)
+- [x] Rate limiting and analytics
+- [ ] Provider dashboard UI for callbacks
+- [ ] Real USSD aggregator integration
+- [ ] SMS/WhatsApp/IVR production integrations
+- [ ] FHIR/DHIS2 export
 - [ ] Real-time chat support
 - [ ] Video consultation
 - [ ] Mobile app (React Native)
 - [ ] Advanced analytics dashboard
-- [ ] Multi-language support
-- [ ] Consent management
 - [ ] Audit logging
 - [ ] Integration with existing EMR systems
 
