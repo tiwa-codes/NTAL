@@ -1,0 +1,89 @@
+sequenceDiagram
+    actor User as Citizen (Feature Phone)
+    participant Telco as Telco Network
+    participant Agg as USSD Aggregator
+    participant API as NTAL API /ussd
+    participant Redis as Redis (Session)
+    participant Triage as Triage Engine
+    participant DB as PostgreSQL
+    participant Queue as Callback Queue
+    participant Provider as Provider Dashboard
+
+    %% Session Start
+    User->>Telco: Dial *123#
+    Telco->>Agg: Route USSD request
+    Agg->>API: POST {sessionId, phoneNumber, text: ""}
+    
+    %% Consent Flow
+    API->>Redis: Check rate limit (hashed phone)
+    Redis-->>API: OK (under 10/day)
+    API->>Redis: Store session state
+    API-->>Agg: CON Welcome. Consent to data use? 1=Yes 2=No
+    Agg-->>User: Display consent prompt
+    
+    User->>Telco: Press 1 (Consent)
+    Telco->>Agg: Forward response
+    Agg->>API: POST {sessionId, phoneNumber, text: "1"}
+    API->>Redis: Get session, update state
+    API->>DB: Log consent (version, timestamp)
+    
+    %% Demographics
+    API-->>Agg: CON Select age: 1=<5, 2=5-17, 3=18-49, 4=50+
+    Agg-->>User: Display age menu
+    
+    User->>Telco: Press 3 (18-49)
+    Telco->>Agg: Forward
+    Agg->>API: POST {sessionId, phoneNumber, text: "1*3"}
+    API->>Redis: Update session (age_group: "18-49")
+    API-->>Agg: CON Gender? 1=Male 2=Female 3=Other
+    Agg-->>User: Display gender menu
+    
+    %% Symptom Assessment
+    User->>Telco: Press 2 (Female)
+    Telco->>Agg: Forward
+    Agg->>API: POST {sessionId, phoneNumber, text: "1*3*2"}
+    API->>Redis: Update session (gender: "female")
+    API-->>Agg: CON Do you have fever? 1=Yes 2=No
+    Agg-->>User: Display symptom questions
+    
+    Note over User,API: Multiple symptom questions follow<br/>(fever, headache, danger signs, cough)
+    
+    User->>Telco: Complete symptom input
+    Telco->>Agg: Forward final response
+    Agg->>API: POST {sessionId, phoneNumber, text: "1*3*2*1*1*2*2"}
+    
+    %% Triage Evaluation
+    API->>Redis: Get full session data
+    API->>Triage: Evaluate symptoms
+    Triage-->>API: Risk: MALARIA_SUSPECT, Priority: HIGH
+    
+    API->>DB: Create encounter (hashed MSISDN, symptoms, risk)
+    API->>Redis: Increment rate limit counter
+    
+    API-->>Agg: END Risk: MALARIA_SUSPECT. Callback? 1=Yes
+    Agg-->>User: Display triage result
+    
+    %% Callback Request
+    User->>Telco: Press 1 (Request callback)
+    Telco->>Agg: Forward
+    Agg->>API: POST {sessionId, phoneNumber, text: "1*3*2*1*1*2*2*1"}
+    API->>Queue: Add callback (priority: HIGH)
+    API->>Redis: Clear session
+    API-->>Agg: END Callback requested. Provider will contact you.
+    Agg-->>User: Session complete
+    
+    %% Provider Workflow
+    Note over Provider: Provider logs in to dashboard
+    Provider->>API: GET /api/v1/callbacks?status=pending
+    API->>DB: Fetch pending callbacks
+    DB-->>API: Return callbacks
+    API-->>Provider: Display callback queue
+    
+    Provider->>API: POST /api/v1/callbacks/{id}/assign
+    API->>DB: Assign callback to provider
+    
+    Note over Provider: Provider contacts patient<br/>and completes consultation
+    
+    Provider->>API: POST /api/v1/callbacks/{id}/complete
+    API->>DB: Update callback status
+    API-->>Provider: Callback marked complete

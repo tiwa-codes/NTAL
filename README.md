@@ -46,6 +46,26 @@
 - **IVR** - Voice response system
 - **Web** - Browser-based access
 
+### Architecture Diagrams
+
+Visual architecture diagrams are available in Mermaid format:
+
+- **System Flow** - USSD-first end-to-end flow from citizens to providers
+- **USSD Session Sequence** - Detailed sequence diagram of a typical USSD session
+- **Components Overview** - High-level component architecture
+
+**Mermaid sources:** `docs/architecture/diagrams/*.mmd`
+
+**Render locally:**
+```bash
+npm install -D @mermaid-js/mermaid-cli
+bash scripts/render-diagrams.sh
+```
+
+**Outputs:** `docs/architecture/diagrams/out/*.png` and `*.pdf`
+
+The GitHub Action workflow automatically renders and uploads diagram artifacts on every change. Download them from the Actions tab.
+
 ## 🚀 Quick Start
 
 ### Prerequisites

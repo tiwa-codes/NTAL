@@ -1,0 +1,85 @@
+graph TB
+    %% NTAL Components Overview
+    
+    subgraph AccessLayer["Access Layer"]
+        USSD["USSD Short Code<br/>*123#<br/>(Primary Channel)"]
+        Web["Provider Web<br/>(React PWA)"]
+        Aggregator["USSD Aggregator<br/>(Africa's Talking)"]
+        Future["Future Channels<br/>(SMS, WhatsApp, IVR)"]
+    end
+    
+    subgraph APIGateway["API Gateway"]
+        USSDRoute["USSD Handler<br/>POST /api/v1/ussd"]
+        TriageRoute["Triage Handler<br/>POST /api/v1/triage"]
+        AuthRoute["Auth Handler<br/>POST /api/v1/auth/*"]
+        EncounterRoute["Encounter API<br/>GET/PUT /api/v1/encounters/*"]
+        CallbackRoute["Callback API<br/>GET/POST /api/v1/callbacks/*"]
+        MetricsRoute["Metrics API<br/>GET /api/v1/metrics/*"]
+    end
+    
+    subgraph CoreLogic["Application Core"]
+        TriageEngine["Triage Engine<br/>(Risk Assessment)"]
+        SessionMgr["Session Manager<br/>(State Machine)"]
+        ConsentMgr["Consent Manager<br/>(Audit Logger)"]
+        AuthMgr["Auth Manager<br/>(JWT + bcrypt)"]
+        RateLimiter["Rate Limiter<br/>(10/day per phone)"]
+        CallbackMgr["Callback Manager<br/>(Queue + SLA)"]
+    end
+    
+    subgraph DataLayer["Data Layer"]
+        Redis["Redis<br/>(Sessions, Rate Limits)"]
+        Postgres["PostgreSQL<br/>(Encounters, Providers,<br/>Callbacks, Consent)"]
+    end
+    
+    subgraph ExternalAdapters["External Adapters"]
+        RegistryAdapter["Registry Adapter<br/>(FHIR/OpenHIE)<br/>Phase 2"]
+        SMSAdapter["SMS Adapter<br/>(Twilio/AfricasTalking)<br/>Optional"]
+        AnalyticsAdapter["Analytics Adapter<br/>(DHIS2)<br/>Phase 2"]
+    end
+    
+    %% Access Layer Connections
+    USSD --> Aggregator
+    Aggregator --> USSDRoute
+    Web --> AuthRoute
+    Web --> EncounterRoute
+    Web --> CallbackRoute
+    Future -.-> APIGateway
+    
+    %% API Gateway to Core Logic
+    USSDRoute --> SessionMgr
+    USSDRoute --> RateLimiter
+    USSDRoute --> TriageEngine
+    USSDRoute --> ConsentMgr
+    
+    TriageRoute --> TriageEngine
+    AuthRoute --> AuthMgr
+    EncounterRoute --> AuthMgr
+    CallbackRoute --> AuthMgr
+    CallbackRoute --> CallbackMgr
+    MetricsRoute --> AuthMgr
+    
+    %% Core Logic to Data Layer
+    SessionMgr --> Redis
+    RateLimiter --> Redis
+    TriageEngine --> Postgres
+    ConsentMgr --> Postgres
+    AuthMgr --> Postgres
+    CallbackMgr --> Postgres
+    
+    %% Core Logic to External Adapters
+    TriageEngine -.->|"Future"| RegistryAdapter
+    CallbackMgr -.->|"Optional"| SMSAdapter
+    Postgres -.->|"Future"| AnalyticsAdapter
+    
+    %% Styling
+    classDef access fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef api fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef core fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef data fill:#ffebee,stroke:#b71c1c,stroke-width:2px
+    classDef external fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    
+    class USSD,Web,Aggregator,Future access
+    class USSDRoute,TriageRoute,AuthRoute,EncounterRoute,CallbackRoute,MetricsRoute api
+    class TriageEngine,SessionMgr,ConsentMgr,AuthMgr,RateLimiter,CallbackMgr core
+    class Redis,Postgres data
+    class RegistryAdapter,SMSAdapter,AnalyticsAdapter external

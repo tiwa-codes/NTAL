@@ -1,0 +1,92 @@
+flowchart TB
+    %% USSD-first System Flow
+    subgraph Citizens["Citizens/Patients"]
+        FeaturePhone["Feature Phone<br/>(USSD)"]
+        Smartphone["Smartphone<br/>(Web/WhatsApp)"]
+    end
+
+    subgraph Telcos["Telco Network"]
+        Safaricom["Safaricom"]
+        Airtel["Airtel"]
+        MTN["MTN"]
+    end
+
+    subgraph Aggregator["USSD Aggregator"]
+        AggService["Africa's Talking /<br/>Other Aggregator"]
+    end
+
+    subgraph NTAL_API["NTAL API Layer"]
+        USSDEndpoint["POST /api/v1/ussd<br/>(USSD Handler)"]
+        WebEndpoint["POST /api/v1/triage<br/>(Web Handler)"]
+        AuthEndpoint["POST /api/v1/auth/login<br/>(Provider Auth)"]
+    end
+
+    subgraph CoreServices["Core Services"]
+        TriageEngine["Triage Engine<br/>(Risk Assessment)"]
+        ConsentLogger["Audit & Consent<br/>Logger"]
+        SessionMgr["Session Manager<br/>(Redis)"]
+        
+        subgraph Storage["Data Storage"]
+            Redis["Redis<br/>(Sessions & Rate Limit)"]
+            Postgres["PostgreSQL<br/>(Encounters & Providers)"]
+        end
+        
+        subgraph Adapters["External Adapters"]
+            RegistryAdapter["Registry Adapter<br/>(FHIR/OpenHIE)"]
+            SMSAdapter["SMS Adapter<br/>(Notifications)"]
+            Analytics["Analytics Adapter<br/>(DHIS2 - Phase 2)"]
+        end
+    end
+
+    subgraph ProviderWeb["Provider Dashboard"]
+        WebApp["React PWA<br/>(Provider Interface)"]
+        JWT["JWT Auth"]
+    end
+
+    %% Flow connections
+    FeaturePhone -->|"*123#"| Safaricom
+    FeaturePhone -->|"*123#"| Airtel
+    FeaturePhone -->|"*123#"| MTN
+    Smartphone -->|HTTPS| WebEndpoint
+    
+    Safaricom --> AggService
+    Airtel --> AggService
+    MTN --> AggService
+    
+    AggService -->|HTTP Callback| USSDEndpoint
+    
+    USSDEndpoint --> TriageEngine
+    USSDEndpoint --> ConsentLogger
+    USSDEndpoint --> SessionMgr
+    WebEndpoint --> TriageEngine
+    
+    TriageEngine --> Redis
+    TriageEngine --> Postgres
+    SessionMgr --> Redis
+    ConsentLogger --> Postgres
+    
+    TriageEngine -.->|"Phase 2"| RegistryAdapter
+    TriageEngine -.->|"Optional"| SMSAdapter
+    Postgres -.->|"Phase 2"| Analytics
+    
+    WebApp -->|JWT Token| AuthEndpoint
+    AuthEndpoint --> JWT
+    JWT --> Postgres
+    WebApp -->|Get/Update Encounters| NTAL_API
+    
+    %% Styling
+    classDef citizens fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    classDef telco fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef aggregator fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef api fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef core fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    classDef storage fill:#ffebee,stroke:#b71c1c,stroke-width:2px
+    classDef provider fill:#e0f2f1,stroke:#004d40,stroke-width:2px
+    
+    class FeaturePhone,Smartphone citizens
+    class Safaricom,Airtel,MTN telco
+    class AggService aggregator
+    class USSDEndpoint,WebEndpoint,AuthEndpoint api
+    class TriageEngine,ConsentLogger,SessionMgr,RegistryAdapter,SMSAdapter,Analytics core
+    class Redis,Postgres storage
+    class WebApp,JWT provider
