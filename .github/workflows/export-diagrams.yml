@@ -26,11 +26,18 @@ jobs:
         with:
           node-version: '20'
       
-      - name: Install Playwright dependencies
+      - name: Install system dependencies
         run: |
-          npx -y playwright@latest install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+      
+      - name: Install mermaid-cli
+        run: |
+          PUPPETEER_SKIP_DOWNLOAD=true npm install --no-save @mermaid-js/mermaid-cli
       
       - name: Render diagrams
+        env:
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
         run: |
           bash scripts/render-diagrams.sh
       
