@@ -19,20 +19,26 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
       
-      - name: Install system dependencies
+      - name: Install system dependencies(chromium)
         run: |
           sudo apt-get update
-          sudo apt-get install -y chromium-browser
-      
+          # Try both package names; some images use chromium instead of chromium-browser
+          sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium
+          which chromium-browser && ln -sf "$(which chromium-browser)" /usr/bin/chromium || true
+          which chromium && ln -sf "$(which chromium)" /usr/bin/chromium-browser || true
+          echo "Chromium path(s):"
+          ls -l /usr/bin/chromium* || true
+          
       - name: Install mermaid-cli
         run: |
+          # If you prefer Puppeteer’s bundled Chromium, remove PUPPETEER_SKIP_DOWNLOAD and system install step above.
           PUPPETEER_SKIP_DOWNLOAD=true npm install --no-save @mermaid-js/mermaid-cli
       
       - name: Render diagrams
@@ -59,7 +65,7 @@ jobs:
       
       - name: Summary
         run: |
-          echo "## 📊 Diagram Rendering Complete" >> $GITHUB_STEP_SUMMARY
+          ececho "## 📊 Diagram Rendering Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Successfully rendered architecture diagrams!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -68,4 +74,4 @@ jobs:
           ls -lh docs/architecture/diagrams/out/ >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Download artifacts from the workflow run page." >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts from the workflow run page."
