@@ -1,32 +1,30 @@
 name: Export Architecture Diagrams
 
 on:
-  # Allow manual trigger
   workflow_dispatch:
-  
-  # Trigger on changes to diagrams or render script
   push:
     paths:
       - 'docs/architecture/diagrams/*.mmd'
       - 'scripts/render-diagrams.sh'
 
+# If you want to auto-commit rendered diagrams, change contents: read → contents: write
 permissions:
   contents: read
 
 jobs:
   render-diagrams:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-      
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
-      - name: Install system dependencies(chromium)
+
+      - name: Install system dependencies (Chromium)
         run: |
           sudo apt-get update
           # Try both package names; some images use chromium instead of chromium-browser
@@ -35,37 +33,61 @@ jobs:
           which chromium && ln -sf "$(which chromium)" /usr/bin/chromium-browser || true
           echo "Chromium path(s):"
           ls -l /usr/bin/chromium* || true
-          
+
       - name: Install mermaid-cli
         run: |
           # If you prefer Puppeteer’s bundled Chromium, remove PUPPETEER_SKIP_DOWNLOAD and system install step above.
           PUPPETEER_SKIP_DOWNLOAD=true npm install --no-save @mermaid-js/mermaid-cli
-      
+
       - name: Render diagrams
         env:
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
         run: |
           bash scripts/render-diagrams.sh
-      
+
       - name: Upload PNG artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ntal-diagrams-png
           path: docs/architecture/diagrams/out/*.png
           if-no-files-found: error
           retention-days: 90
-      
+
       - name: Upload PDF artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ntal-diagrams-pdf
           path: docs/architecture/diagrams/out/*.pdf
           if-no-files-found: error
           retention-days: 90
-      
+
+      # Optional: also export SVGs (if you add -o *.svg in your script)
+      # - name: Upload SVG artifacts
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: ntal-diagrams-svg
+      #     path: docs/architecture/diagrams/out/*.svg
+      #     if-no-files-found: warn
+      #     retention-days: 30
+
+      # Optional: commit generated diagrams back to main
+      # Requires: permissions.contents: write (set above) and branching policy that allows pushes.
+      # - name: Commit rendered diagrams
+      #   if: github.ref == 'refs/heads/main'
+      #   run: |
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      #     git add docs/architecture/diagrams/out/*.png docs/architecture/diagrams/out/*.pdf
+      #     if git diff --cached --quiet; then
+      #       echo "No changes to commit."
+      #     else
+      #       git commit -m "chore: update rendered architecture diagrams"
+      #       git push
+      #     fi
+
       - name: Summary
         run: |
-          ececho "## 📊 Diagram Rendering Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## 📊 Diagram Rendering Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Successfully rendered architecture diagrams!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
