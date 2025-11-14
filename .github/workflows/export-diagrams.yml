@@ -1,0 +1,64 @@
+name: Export Architecture Diagrams
+
+on:
+  # Allow manual trigger
+  workflow_dispatch:
+  
+  # Trigger on changes to diagrams or render script
+  push:
+    paths:
+      - 'docs/architecture/diagrams/*.mmd'
+      - 'scripts/render-diagrams.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  render-diagrams:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Install Playwright dependencies
+        run: |
+          npx -y playwright@latest install --with-deps chromium
+      
+      - name: Render diagrams
+        run: |
+          bash scripts/render-diagrams.sh
+      
+      - name: Upload PNG artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ntal-diagrams-png
+          path: docs/architecture/diagrams/out/*.png
+          if-no-files-found: error
+          retention-days: 90
+      
+      - name: Upload PDF artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ntal-diagrams-pdf
+          path: docs/architecture/diagrams/out/*.pdf
+          if-no-files-found: error
+          retention-days: 90
+      
+      - name: Summary
+        run: |
+          echo "## 📊 Diagram Rendering Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Successfully rendered architecture diagrams!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Generated Files:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          ls -lh docs/architecture/diagrams/out/ >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Download artifacts from the workflow run page." >> $GITHUB_STEP_SUMMARY
